@@ -1,23 +1,24 @@
 {
-    "name": "kash-face-video-generator",
-    "version": "1.0.0",
-    "description": "Video title to script to Higgsfield prompt generator",
-    "scripts": {
-          "dev": "next dev",
-          "build": "next build",
-          "start": "next start",
-          "lint": "next lint"
-    },
-    "dependencies": {
-          "@anthropic-ai/sdk": "latest",
-          "@supabase/supabase-js": "latest",
-          "openai": "latest",
-          "react": "^18.2.0",
-          "react-dom": "^18.2.0",
-          "next": "^15.0.0"
-    },
-    "devDependencies": {
-          "eslint": "^8.0.0",
-          "eslint-config-next": "^15.0.0"
-    }
+  "name": "kash-face-video-generator",
+  "version": "1.0.0",
+  "description": "Video title to script to Higgsfield prompt generator",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@google/genai": "latest",
+    "@supabase/supabase-js": "latest",
+    "openai": "latest",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "^15.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^15.0.0"
+  }
 }
