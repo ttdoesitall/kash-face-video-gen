@@ -1,3 +1,4 @@
+export const maxDuration = 300;
 import { HiggsfieldClient } from '@higgsfield/client';
 
 const client = new HiggsfieldClient({
