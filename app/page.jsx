@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-const STEPS = ['Script', 'Avatar', 'Image', 'Movement', 'Done'];
+const STEPS = ['Script', 'Avatar', 'Image', 'Movement', 'Video', 'Done'];
+const STAGE_FOR_STEP = ['script', 'avatar', 'image', 'movement', 'video'];
 
 const STEP_INDEX = {
   input: 0,
@@ -11,10 +12,13 @@ const STEP_INDEX = {
   avatar: 1,
   image: 2,
   movement: 3,
-  done: 4,
+  video: 4,
+  done: 5,
 };
 
 export default function Dashboard() {
+  const [view, setView] = useState('create');
+
   const [stage, setStage] = useState('input');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,7 +32,16 @@ export default function Dashboard() {
   const [imageMime, setImageMime] = useState('image/png');
   const [imageProvider, setImageProvider] = useState('gemini');
   const [movementPrompt, setMovementPrompt] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
   const [saveWarning, setSaveWarning] = useState('');
+
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const resetAll = () => {
     setStage('input');
@@ -43,6 +56,7 @@ export default function Dashboard() {
     setImageMime('image/png');
     setImageProvider('gemini');
     setMovementPrompt('');
+    setVideoUrl('');
     setSaveWarning('');
   };
 
@@ -60,9 +74,9 @@ export default function Dashboard() {
   };
 
   // Resizes + recompresses a base64 image client-side so downstream requests
-  // (movement analysis, save) never hit Vercel's serverless body size limit.
+  // (movement analysis, video generation, save) never hit body size limits.
   const compressImage = (base64, mimeType, maxDim = 1024, quality = 0.82) => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new window.Image();
       img.onload = () => {
         let { width, height } = img;
@@ -85,8 +99,6 @@ export default function Dashboard() {
         resolve({ base64: compressedBase64, mimeType: 'image/jpeg' });
       };
       img.onerror = () => {
-        // If compression fails for any reason, fall back to the original image
-        // rather than blocking the whole flow.
         resolve({ base64, mimeType });
       };
       img.src = `data:${mimeType};base64,${base64}`;
@@ -182,9 +194,30 @@ export default function Dashboard() {
     }
   };
 
-  const handleApproveAndSave = async () => {
+  const handleGenerateVideo = async () => {
     if (!movementPrompt.trim()) {
       setError('Movement prompt cannot be empty');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const data = await callApi('/api/generate-video', {
+        imageBase64,
+        movementPrompt,
+      });
+      setVideoUrl(data.videoUrl);
+      setStage('video');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveAndSave = async () => {
+    if (!videoUrl) {
+      setError('Generate a video before saving');
       return;
     }
     setLoading(true);
@@ -197,6 +230,7 @@ export default function Dashboard() {
         avatarPrompt,
         imageBase64,
         movementPrompt,
+        videoUrl,
       });
       if (data.warning) {
         setSaveWarning(data.warning);
@@ -211,232 +245,428 @@ export default function Dashboard() {
 
   const stepIndex = STEP_INDEX[stage] ?? 0;
 
+  const goToStep = (i) => {
+    if (i >= stepIndex) return;
+    const target = STAGE_FOR_STEP[i];
+    if (target) {
+      setError('');
+      setStage(target);
+    }
+  };
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const res = await fetch('/api/videos');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load history');
+      }
+      setHistoryItems(data.videos || []);
+      setHistoryLoaded(true);
+    } catch (err) {
+      setHistoryError(err.message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'history' && !historyLoaded && !historyLoading) {
+      loadHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const openHistoryDetail = async (id) => {
+    setSelectedId(id);
+    setDetailLoading(true);
+    setSelectedDetail(null);
+    try {
+      const res = await fetch(`/api/videos/${id}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load video');
+      }
+      setSelectedDetail(data.video);
+    } catch (err) {
+      setHistoryError(err.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeHistoryDetail = () => {
+    setSelectedId(null);
+    setSelectedDetail(null);
+  };
+
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
-        <h1>Video Generator</h1>
-        <p>Title → Script → Avatar → Image → Movement</p>
+    <div className="app-shell">
+      <div className="dashboard-container">
+        {view === 'create' && (
+          <>
+            <div className="dashboard-header">
+              <h1>Video Generator</h1>
+              <p>Title → Script → Avatar → Image → Movement → Video</p>
+            </div>
+
+            {stage !== 'input' && (
+              <div className="stepper">
+                {STEPS.map((label, i) => (
+                  <div
+                    key={label}
+                    className={
+                      'stepper-dot' +
+                      (i === stepIndex ? ' active' : '') +
+                      (i < stepIndex ? ' complete clickable' : '')
+                    }
+                    onClick={() => goToStep(i)}
+                  >
+                    <span className="stepper-circle">{i + 1}</span>
+                    <span className="stepper-label">{label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {error && <div className="error-message">{error}</div>}
+
+            {/* STAGE: INPUT */}
+            {stage === 'input' && (
+              <div className="stage-card">
+                <div className="input-section">
+                  <label>Video Title</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Enter your video title..."
+                    onKeyPress={(e) => e.key === 'Enter' && handleGenerateScript()}
+                  />
+                  <button onClick={handleGenerateScript} disabled={loading}>
+                    {loading ? 'Generating...' : 'Generate Script 💫'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: SCRIPT */}
+            {stage === 'script' && (
+              <div className="stage-card">
+                <h3>Script</h3>
+                <p className="stage-hint">Edit freely, then continue.</p>
+                <textarea
+                  className="stage-textarea"
+                  value={script}
+                  onChange={(e) => setScript(e.target.value)}
+                  rows={10}
+                />
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={handleGenerateScript}
+                    disabled={loading}
+                  >
+                    {loading ? 'Regenerating...' : 'Regenerate'}
+                  </button>
+                  <button onClick={handleContinueFromScript} disabled={loading}>
+                    Continue →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: GENDER SELECT */}
+            {stage === 'gender' && (
+              <div className="stage-card">
+                <h3>Avatar Setup</h3>
+                <p className="stage-hint">Male or female avatar?</p>
+                <div className="gender-options">
+                  <button
+                    className={gender === 'female' ? 'gender-btn active' : 'gender-btn'}
+                    onClick={() => setGender('female')}
+                  >
+                    Female
+                  </button>
+                  <button
+                    className={gender === 'male' ? 'gender-btn active' : 'gender-btn'}
+                    onClick={() => setGender('male')}
+                  >
+                    Male
+                  </button>
+                </div>
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setStage('script')}
+                    disabled={loading}
+                  >
+                    ← Back to Script
+                  </button>
+                  <button onClick={handleGenerateAvatar} disabled={loading}>
+                    {loading ? 'Generating...' : 'Generate Avatar Prompt →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: AVATAR PROMPT */}
+            {stage === 'avatar' && (
+              <div className="stage-card">
+                <h3>Avatar Prompt</h3>
+                <p className="stage-hint">Edit freely, then generate the image.</p>
+                <textarea
+                  className="stage-textarea"
+                  value={avatarPrompt}
+                  onChange={(e) => setAvatarPrompt(e.target.value)}
+                  rows={8}
+                />
+                <label className="aspect-label">Aspect Ratio</label>
+                <select
+                  className="aspect-select"
+                  value={aspectRatio}
+                  onChange={(e) => setAspectRatio(e.target.value)}
+                >
+                  <option value="16:9">16:9 (widescreen)</option>
+                  <option value="9:16">9:16 (vertical / reels)</option>
+                  <option value="1:1">1:1 (square)</option>
+                  <option value="4:5">4:5 (portrait)</option>
+                </select>
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={handleGenerateAvatar}
+                    disabled={loading}
+                  >
+                    {loading ? 'Regenerating...' : 'Regenerate Prompt'}
+                  </button>
+                  <button onClick={() => handleGenerateImage('gemini')} disabled={loading}>
+                    {loading ? 'Generating...' : 'Generate Image (Gemini) 🖼️'}
+                  </button>
+                  <button onClick={() => handleGenerateImage('openai')} disabled={loading}>
+                    {loading ? 'Generating...' : 'Generate Image (ChatGPT) 🎨'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: IMAGE */}
+            {stage === 'image' && (
+              <div className="stage-card">
+                <h3>Avatar Image</h3>
+                <p className="stage-hint">
+                  Generated with {imageProvider === 'openai' ? 'ChatGPT' : 'Gemini'}.
+                </p>
+                {imageBase64 && (
+                  <div className="image-preview">
+                    <img
+                      src={`data:${imageMime};base64,${imageBase64}`}
+                      alt="Generated avatar"
+                    />
+                  </div>
+                )}
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={handleRegenerateImage}
+                    disabled={loading}
+                  >
+                    {loading ? 'Regenerating...' : 'Regenerate (same provider)'}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() =>
+                      handleGenerateImage(imageProvider === 'openai' ? 'gemini' : 'openai')
+                    }
+                    disabled={loading}
+                  >
+                    {loading
+                      ? 'Generating...'
+                      : `Try ${imageProvider === 'openai' ? 'Gemini' : 'ChatGPT'} Instead`}
+                  </button>
+                  <button onClick={handleContinueFromImage} disabled={loading}>
+                    {loading ? 'Analyzing...' : 'Continue →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: MOVEMENT */}
+            {stage === 'movement' && (
+              <div className="stage-card">
+                <h3>Movement Prompt</h3>
+                <p className="stage-hint">Edit freely, then generate the video.</p>
+                <textarea
+                  className="stage-textarea"
+                  value={movementPrompt}
+                  onChange={(e) => setMovementPrompt(e.target.value)}
+                  rows={8}
+                />
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={handleContinueFromImage}
+                    disabled={loading}
+                  >
+                    {loading ? 'Regenerating...' : 'Regenerate'}
+                  </button>
+                  <button onClick={handleGenerateVideo} disabled={loading}>
+                    {loading ? 'Generating Video...' : 'Generate Video →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: VIDEO */}
+            {stage === 'video' && (
+              <div className="stage-card">
+                <h3>Video Preview</h3>
+                <p className="stage-hint">Watch it, then approve to save — or regenerate.</p>
+                {videoUrl && (
+                  <div className="video-preview">
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <video src={videoUrl} controls playsInline />
+                  </div>
+                )}
+                <div className="stage-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={handleGenerateVideo}
+                    disabled={loading}
+                  >
+                    {loading ? 'Regenerating...' : 'Regenerate Video'}
+                  </button>
+                  <button onClick={handleApproveAndSave} disabled={loading}>
+                    {loading ? 'Saving...' : 'Approve & Save ✓'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE: DONE */}
+            {stage === 'done' && (
+              <div className="stage-card done-card">
+                <h3>Saved ✓</h3>
+                <p className="stage-hint">
+                  Script, avatar prompt, image, movement prompt, and video are saved.
+                </p>
+                {saveWarning && <div className="save-warning">{saveWarning}</div>}
+                <div className="stage-actions">
+                  <button onClick={resetAll}>Start New Video</button>
+                  <button className="btn-secondary" onClick={() => setView('history')}>
+                    View in History
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {view === 'history' && (
+          <div className="history-view">
+            <div className="dashboard-header">
+              <h1>History</h1>
+              <p>Everything you've approved and saved.</p>
+            </div>
+
+            {historyError && <div className="error-message">{historyError}</div>}
+            {historyLoading && <p className="stage-hint">Loading...</p>}
+            {!historyLoading && historyLoaded && historyItems.length === 0 && (
+              <p className="stage-hint">
+                No videos yet. Head to Create to make your first one.
+              </p>
+            )}
+
+            <div className="history-list">
+              {historyItems.map((item) => (
+                <button
+                  key={item.id}
+                  className="history-card"
+                  onClick={() => openHistoryDetail(item.id)}
+                >
+                  <div className="history-card-main">
+                    <span className="history-card-title">{item.title}</span>
+                    <span className="history-card-meta">
+                      {new Date(item.created_at).toLocaleDateString()} · {item.status}
+                      {item.video_url ? ' · video ready' : ''}
+                    </span>
+                  </div>
+                  <span className="history-card-arrow">›</span>
+                </button>
+              ))}
+            </div>
+
+            {selectedId && (
+              <div className="history-detail-overlay" onClick={closeHistoryDetail}>
+                <div
+                  className="history-detail-panel"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button className="history-detail-close" onClick={closeHistoryDetail}>
+                    ✕
+                  </button>
+                  {detailLoading && <p className="stage-hint">Loading...</p>}
+                  {selectedDetail && (
+                    <>
+                      <h3>{selectedDetail.title}</h3>
+                      {selectedDetail.video_url ? (
+                        <div className="video-preview">
+                          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                          <video src={selectedDetail.video_url} controls playsInline />
+                        </div>
+                      ) : selectedDetail.image_base64 ? (
+                        <div className="image-preview">
+                          <img
+                            src={`data:image/jpeg;base64,${selectedDetail.image_base64}`}
+                            alt={selectedDetail.title}
+                          />
+                        </div>
+                      ) : null}
+                      <label className="aspect-label">Script</label>
+                      <p className="history-detail-text">{selectedDetail.script}</p>
+                      {selectedDetail.avatar_prompt && (
+                        <>
+                          <label className="aspect-label">Avatar Prompt</label>
+                          <p className="history-detail-text">
+                            {selectedDetail.avatar_prompt}
+                          </p>
+                        </>
+                      )}
+                      {selectedDetail.movement_prompt && (
+                        <>
+                          <label className="aspect-label">Movement Prompt</label>
+                          <p className="history-detail-text">
+                            {selectedDetail.movement_prompt}
+                          </p>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {stage !== 'input' && (
-        <div className="stepper">
-          {STEPS.map((label, i) => (
-            <div
-              key={label}
-              className={
-                'stepper-dot' +
-                (i === stepIndex ? ' active' : '') +
-                (i < stepIndex ? ' complete' : '')
-              }
-            >
-              <span className="stepper-circle">{i + 1}</span>
-              <span className="stepper-label">{label}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && <div className="error-message">{error}</div>}
-
-      {/* STAGE: INPUT */}
-      {stage === 'input' && (
-        <div className="stage-card">
-          <div className="input-section">
-            <label>Video Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter your video title..."
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerateScript()}
-            />
-            <button onClick={handleGenerateScript} disabled={loading}>
-              {loading ? 'Generating...' : 'Generate Script 💫'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: SCRIPT */}
-      {stage === 'script' && (
-        <div className="stage-card">
-          <h3>Script</h3>
-          <p className="stage-hint">Edit freely, then continue.</p>
-          <textarea
-            className="stage-textarea"
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            rows={10}
-          />
-          <div className="stage-actions">
-            <button
-              className="btn-secondary"
-              onClick={handleGenerateScript}
-              disabled={loading}
-            >
-              {loading ? 'Regenerating...' : 'Regenerate'}
-            </button>
-            <button onClick={handleContinueFromScript} disabled={loading}>
-              Continue →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: GENDER SELECT */}
-      {stage === 'gender' && (
-        <div className="stage-card">
-          <h3>Avatar Setup</h3>
-          <p className="stage-hint">Male or female avatar?</p>
-          <div className="gender-options">
-            <button
-              className={gender === 'female' ? 'gender-btn active' : 'gender-btn'}
-              onClick={() => setGender('female')}
-            >
-              Female
-            </button>
-            <button
-              className={gender === 'male' ? 'gender-btn active' : 'gender-btn'}
-              onClick={() => setGender('male')}
-            >
-              Male
-            </button>
-          </div>
-          <div className="stage-actions">
-            <button
-              className="btn-secondary"
-              onClick={() => setStage('script')}
-              disabled={loading}
-            >
-              ← Back to Script
-            </button>
-            <button onClick={handleGenerateAvatar} disabled={loading}>
-              {loading ? 'Generating...' : 'Generate Avatar Prompt →'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: AVATAR PROMPT */}
-      {stage === 'avatar' && (
-        <div className="stage-card">
-          <h3>Avatar Prompt</h3>
-          <p className="stage-hint">Edit freely, then generate the image.</p>
-          <textarea
-            className="stage-textarea"
-            value={avatarPrompt}
-            onChange={(e) => setAvatarPrompt(e.target.value)}
-            rows={8}
-          />
-          <label className="aspect-label">Aspect Ratio</label>
-          <select
-            className="aspect-select"
-            value={aspectRatio}
-            onChange={(e) => setAspectRatio(e.target.value)}
-          >
-            <option value="16:9">16:9 (widescreen)</option>
-            <option value="9:16">9:16 (vertical / reels)</option>
-            <option value="1:1">1:1 (square)</option>
-            <option value="4:5">4:5 (portrait)</option>
-          </select>
-          <div className="stage-actions">
-            <button
-              className="btn-secondary"
-              onClick={handleGenerateAvatar}
-              disabled={loading}
-            >
-              {loading ? 'Regenerating...' : 'Regenerate Prompt'}
-            </button>
-            <button onClick={() => handleGenerateImage('gemini')} disabled={loading}>
-              {loading ? 'Generating...' : 'Generate Image (Gemini) 🖼️'}
-            </button>
-            <button onClick={() => handleGenerateImage('openai')} disabled={loading}>
-              {loading ? 'Generating...' : 'Generate Image (ChatGPT) 🎨'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: IMAGE */}
-      {stage === 'image' && (
-        <div className="stage-card">
-          <h3>Avatar Image</h3>
-          <p className="stage-hint">
-            Generated with {imageProvider === 'openai' ? 'ChatGPT' : 'Gemini'}.
-          </p>
-          {imageBase64 && (
-            <div className="image-preview">
-              <img
-                src={`data:${imageMime};base64,${imageBase64}`}
-                alt="Generated avatar"
-              />
-            </div>
-          )}
-          <div className="stage-actions">
-            <button
-              className="btn-secondary"
-              onClick={handleRegenerateImage}
-              disabled={loading}
-            >
-              {loading ? 'Regenerating...' : 'Regenerate (same provider)'}
-            </button>
-            <button
-              className="btn-secondary"
-              onClick={() =>
-                handleGenerateImage(imageProvider === 'openai' ? 'gemini' : 'openai')
-              }
-              disabled={loading}
-            >
-              {loading
-                ? 'Generating...'
-                : `Try ${imageProvider === 'openai' ? 'Gemini' : 'ChatGPT'} Instead`}
-            </button>
-            <button onClick={handleContinueFromImage} disabled={loading}>
-              {loading ? 'Analyzing...' : 'Continue →'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: MOVEMENT */}
-      {stage === 'movement' && (
-        <div className="stage-card">
-          <h3>Movement Prompt</h3>
-          <p className="stage-hint">Edit freely, then approve to save everything.</p>
-          <textarea
-            className="stage-textarea"
-            value={movementPrompt}
-            onChange={(e) => setMovementPrompt(e.target.value)}
-            rows={8}
-          />
-          <div className="stage-actions">
-            <button
-              className="btn-secondary"
-              onClick={handleContinueFromImage}
-              disabled={loading}
-            >
-              {loading ? 'Regenerating...' : 'Regenerate'}
-            </button>
-            <button onClick={handleApproveAndSave} disabled={loading}>
-              {loading ? 'Saving...' : 'Approve & Save ✓'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STAGE: DONE */}
-      {stage === 'done' && (
-        <div className="stage-card done-card">
-          <h3>Saved ✓</h3>
-          <p className="stage-hint">
-            Script, avatar prompt, image, and movement prompt are saved.
-          </p>
-          {saveWarning && <div className="save-warning">{saveWarning}</div>}
-          <div className="stage-actions">
-            <button onClick={resetAll}>Start New Video</button>
-          </div>
-        </div>
-      )}
+      <nav className="bottom-nav">
+        <button
+          className={view === 'create' ? 'bottom-nav-item active' : 'bottom-nav-item'}
+          onClick={() => setView('create')}
+        >
+          <span className="bottom-nav-icon">🎬</span>
+          <span className="bottom-nav-label">Create</span>
+        </button>
+        <button
+          className={view === 'history' ? 'bottom-nav-item active' : 'bottom-nav-item'}
+          onClick={() => setView('history')}
+        >
+          <span className="bottom-nav-icon">🕘</span>
+          <span className="bottom-nav-label">History</span>
+        </button>
+      </nav>
     </div>
   );
 }
