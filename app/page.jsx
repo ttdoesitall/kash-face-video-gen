@@ -59,6 +59,40 @@ export default function Dashboard() {
     return data;
   };
 
+  // Resizes + recompresses a base64 image client-side so downstream requests
+  // (movement analysis, save) never hit Vercel's serverless body size limit.
+  const compressImage = (base64, mimeType, maxDim = 1024, quality = 0.82) => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const compressedBase64 = dataUrl.split(',')[1];
+        resolve({ base64: compressedBase64, mimeType: 'image/jpeg' });
+      };
+      img.onerror = () => {
+        // If compression fails for any reason, fall back to the original image
+        // rather than blocking the whole flow.
+        resolve({ base64, mimeType });
+      };
+      img.src = `data:${mimeType};base64,${base64}`;
+    });
+  };
+
   const handleGenerateScript = async () => {
     if (!title.trim()) {
       setError('Enter a video title');
@@ -114,8 +148,9 @@ export default function Dashboard() {
         avatarPrompt,
         aspectRatio,
       });
-      setImageBase64(data.imageBase64);
-      setImageMime(data.mimeType);
+      const compressed = await compressImage(data.imageBase64, data.mimeType);
+      setImageBase64(compressed.base64);
+      setImageMime(compressed.mimeType);
       setImageProvider(provider);
       setStage('image');
     } catch (err) {
