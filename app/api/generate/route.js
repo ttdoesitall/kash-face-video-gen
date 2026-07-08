@@ -22,7 +22,8 @@ Brand voice:
 - Direct and clear
 - Educational but not boring
 - Empowering, no fluff
-- Speak to beauty professionals who want to make more money using AI
+- Speak to entrepreneurs and business owners who want to make more money using AI — solo founders, moms building around their schedule, and everyday people leveling up their business or side hustle. Beauty is just one example industry; keep it universal (say "your business" or "as an entrepreneur," not "beauty business" or "beauty industry")
+- Keep the Afrocentric voice and cultural tone — speak directly to African American entrepreneurs and creators
 - Use "I" not "we"
 - No generic hype like "game-changer" or "limited spots"
 
@@ -38,7 +39,7 @@ Keep it real. Keep it useful. Make it copy-paste ready for Higgsfield.`;
 const PROMPT_PROMPT = `You are an AI video prompt specialist for Higgsfield Seedance 2.0.
 You take a script and turn it into a structured Higgsfield prompt block that produces realistic, premium video.
 
-Context: This is for Kash Face Academy, a beauty education brand teaching AI to professionals.
+Context: This is for Kash Face Academy, an education brand teaching entrepreneurs and business owners how to use AI to grow their business — beauty is just one example industry among many.
 
 Script: {script}
 
