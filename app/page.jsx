@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [imageBase64, setImageBase64] = useState('');
   const [imageMime, setImageMime] = useState('image/png');
+  const [imageProvider, setImageProvider] = useState('gemini');
   const [movementPrompt, setMovementPrompt] = useState('');
   const [saveWarning, setSaveWarning] = useState('');
 
@@ -40,6 +41,7 @@ export default function Dashboard() {
     setAspectRatio('16:9');
     setImageBase64('');
     setImageMime('image/png');
+    setImageProvider('gemini');
     setMovementPrompt('');
     setSaveWarning('');
   };
@@ -98,20 +100,23 @@ export default function Dashboard() {
     }
   };
 
-  const handleGenerateImage = async () => {
+  const handleGenerateImage = async (provider) => {
     if (!avatarPrompt.trim()) {
       setError('Avatar prompt cannot be empty');
       return;
     }
     setLoading(true);
     setError('');
+    const url =
+      provider === 'openai' ? '/api/generate-image-openai' : '/api/generate-image';
     try {
-      const data = await callApi('/api/generate-image', {
+      const data = await callApi(url, {
         avatarPrompt,
         aspectRatio,
       });
       setImageBase64(data.imageBase64);
       setImageMime(data.mimeType);
+      setImageProvider(provider);
       setStage('image');
     } catch (err) {
       setError(err.message);
@@ -121,7 +126,7 @@ export default function Dashboard() {
   };
 
   const handleRegenerateImage = () => {
-    handleGenerateImage();
+    handleGenerateImage(imageProvider);
   };
 
   const handleContinueFromImage = async () => {
@@ -307,8 +312,11 @@ export default function Dashboard() {
             >
               {loading ? 'Regenerating...' : 'Regenerate Prompt'}
             </button>
-            <button onClick={handleGenerateImage} disabled={loading}>
-              {loading ? 'Generating Image...' : 'Generate Image 🖼️'}
+            <button onClick={() => handleGenerateImage('gemini')} disabled={loading}>
+              {loading ? 'Generating...' : 'Generate Image (Gemini) 🖼️'}
+            </button>
+            <button onClick={() => handleGenerateImage('openai')} disabled={loading}>
+              {loading ? 'Generating...' : 'Generate Image (ChatGPT) 🎨'}
             </button>
           </div>
         </div>
@@ -318,6 +326,9 @@ export default function Dashboard() {
       {stage === 'image' && (
         <div className="stage-card">
           <h3>Avatar Image</h3>
+          <p className="stage-hint">
+            Generated with {imageProvider === 'openai' ? 'ChatGPT' : 'Gemini'}.
+          </p>
           {imageBase64 && (
             <div className="image-preview">
               <img
@@ -332,7 +343,18 @@ export default function Dashboard() {
               onClick={handleRegenerateImage}
               disabled={loading}
             >
-              {loading ? 'Regenerating...' : 'Regenerate Image'}
+              {loading ? 'Regenerating...' : 'Regenerate (same provider)'}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() =>
+                handleGenerateImage(imageProvider === 'openai' ? 'gemini' : 'openai')
+              }
+              disabled={loading}
+            >
+              {loading
+                ? 'Generating...'
+                : `Try ${imageProvider === 'openai' ? 'Gemini' : 'ChatGPT'} Instead`}
             </button>
             <button onClick={handleContinueFromImage} disabled={loading}>
               {loading ? 'Analyzing...' : 'Continue →'}
