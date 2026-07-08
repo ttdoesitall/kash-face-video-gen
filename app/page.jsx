@@ -35,6 +35,11 @@ export default function Dashboard() {
   const [videoUrl, setVideoUrl] = useState('');
   const [saveWarning, setSaveWarning] = useState('');
 
+  const [outfitPrompt, setOutfitPrompt] = useState('');
+  const [outfitImageBase64, setOutfitImageBase64] = useState('');
+  const [outfitLoading, setOutfitLoading] = useState(false);
+  const [outfitError, setOutfitError] = useState('');
+
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -58,6 +63,10 @@ export default function Dashboard() {
     setMovementPrompt('');
     setVideoUrl('');
     setSaveWarning('');
+    setOutfitPrompt('');
+    setOutfitImageBase64('');
+    setOutfitLoading(false);
+    setOutfitError('');
   };
 
   const callApi = async (url, body) => {
@@ -146,6 +155,34 @@ export default function Dashboard() {
     }
   };
 
+  // Fires in the background right after the avatar image succeeds so LaToya
+  // never has to click through an extra step to get a wardrobe-consistency
+  // reference image. Uses the same provider as the avatar image so a
+  // ChatGPT avatar gets a ChatGPT outfit shot (brand names auto-stripped)
+  // and a Gemini avatar gets a Gemini outfit shot (real branding kept).
+  const generateOutfitReference = async (prompt, provider) => {
+    setOutfitLoading(true);
+    setOutfitError('');
+    try {
+      const promptData = await callApi('/api/generate-outfit-prompt', {
+        avatarPrompt: prompt,
+      });
+      setOutfitPrompt(promptData.outfitPrompt);
+      const imgUrl =
+        provider === 'openai' ? '/api/generate-image-openai' : '/api/generate-image';
+      const imgData = await callApi(imgUrl, {
+        avatarPrompt: promptData.outfitPrompt,
+        aspectRatio,
+      });
+      const compressed = await compressImage(imgData.imageBase64, imgData.mimeType);
+      setOutfitImageBase64(compressed.base64);
+    } catch (err) {
+      setOutfitError(err.message);
+    } finally {
+      setOutfitLoading(false);
+    }
+  };
+
   const handleGenerateImage = async (provider) => {
     if (!avatarPrompt.trim()) {
       setError('Avatar prompt cannot be empty');
@@ -165,6 +202,10 @@ export default function Dashboard() {
       setImageMime(compressed.mimeType);
       setImageProvider(provider);
       setStage('image');
+      setOutfitImageBase64('');
+      setOutfitPrompt('');
+      setOutfitError('');
+      generateOutfitReference(avatarPrompt, provider);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -204,6 +245,7 @@ export default function Dashboard() {
     try {
       const data = await callApi('/api/generate-video', {
         imageBase64,
+        outfitImageBase64: outfitImageBase64 || undefined,
         movementPrompt,
       });
       setVideoUrl(data.videoUrl);
@@ -229,6 +271,7 @@ export default function Dashboard() {
         gender,
         avatarPrompt,
         imageBase64,
+        outfitImageBase64: outfitImageBase64 || undefined,
         movementPrompt,
         videoUrl,
       });
@@ -467,6 +510,33 @@ export default function Dashboard() {
                     />
                   </div>
                 )}
+
+                <div className="outfit-reference">
+                  <div className="outfit-reference-header">
+                    <span>Outfit Reference 👗</span>
+                    {outfitLoading && <span className="stage-hint">Generating...</span>}
+                  </div>
+                  {outfitError && <div className="error-message">{outfitError}</div>}
+                  {outfitImageBase64 && !outfitLoading && (
+                    <div className="outfit-preview">
+                      <img
+                        src={`data:image/jpeg;base64,${outfitImageBase64}`}
+                        alt="Outfit reference"
+                      />
+                    </div>
+                  )}
+                  {!outfitLoading && (
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => generateOutfitReference(avatarPrompt, imageProvider)}
+                    >
+                      {outfitImageBase64
+                        ? 'Regenerate Outfit Reference'
+                        : 'Generate Outfit Reference'}
+                    </button>
+                  )}
+                </div>
+
                 <div className="stage-actions">
                   <button
                     className="btn-secondary"
@@ -624,6 +694,17 @@ export default function Dashboard() {
                           />
                         </div>
                       ) : null}
+                      {selectedDetail.outfit_image_base64 && (
+                        <>
+                          <label className="aspect-label">Outfit Reference</label>
+                          <div className="outfit-preview">
+                            <img
+                              src={`data:image/jpeg;base64,${selectedDetail.outfit_image_base64}`}
+                              alt="Outfit reference"
+                            />
+                          </div>
+                        </>
+                      )}
                       <label className="aspect-label">Script</label>
                       <p className="history-detail-text">{selectedDetail.script}</p>
                       {selectedDetail.avatar_prompt && (
