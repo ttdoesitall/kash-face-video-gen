@@ -1,10 +1,14 @@
-———import { Anthropic } from '@anthropic-ai/sdk';
+import { Anthropic } from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const AVATAR_SYSTEM_PROMPT = `Generate casual lifestyle avatar prompts for education content. Beautiful African American male or female models in everyday real-life moments — couch at home, beach, resort, sitting at desk, casual settings. Include visible designer logos and branded pieces (Versace, Gucci, Fendi, Supreme, Prada, etc) on clothing, bags, accessories. Avatar is relatable, real — could be anyone's successful friend, not staged or professional photo shoot energy. Settings vary by script context: home, resort, beach, casual workspace, car, coffee shop. Ask user: male or female avatar? Then generate one detailed paragraph prompt with visible designer branding, relatable setting, premium casual vibe. No aspect ratio in text. Copy-paste ready for image generation.`;
+const AVATAR_SYSTEM_PROMPT = `Generate casual lifestyle avatar prompts for education content. Beautiful African American male or female models in everyday real-life moments — couch at home, beach, resort, sitting at desk, casual settings. Include visible designer logos and branded pieces (Versace, Gucci, Fendi, Supreme, Prada, Louis Vuitton, Chanel, Cartier, etc) on clothing, bags, accessories — use the real brand names in this prompt; they are automatically swapped for generic style language downstream for any image provider that can't reliably render logos, so always write the true brand name here. Avatar is relatable, real — could be anyone's successful friend, not staged or professional photo shoot energy.
+
+Fold in hyper-realism details so the result reads as a real photo, not an AI render: visible skin texture with natural pores and small imperfections (no waxy or airbrushed skin), natural facial asymmetry, believable catchlights in the eyes, realistic individual hair strands, natural fabric texture and creasing in clothing, and shadows/reflections that believably match the light source in the setting.
+
+Settings vary by script context: home, resort, beach, casual workspace, car, coffee shop. Ask user: male or female avatar? Then generate one detailed paragraph prompt combining visible designer branding, relatable setting, premium casual vibe, and the hyper-realism details above. No aspect ratio in text. Copy-paste ready for image generation.`;
 
 export async function POST(request) {
   try {
