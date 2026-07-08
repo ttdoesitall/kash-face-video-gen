@@ -432,3 +432,205 @@ body {
         font-size: 12px;
   }
 }
+
+/* App shell + bottom nav */
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-shell .dashboard-container {
+    flex: 1;
+    padding-bottom: 100px;
+}
+
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    background-color: #ffffff;
+    border-top: 1px solid #e8e8e8;
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+    z-index: 50;
+}
+
+.bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: none;
+    border: none;
+    padding: 8px 28px;
+    cursor: pointer;
+    color: #9da3ae;
+    border-radius: 8px;
+    min-width: 80px;
+}
+
+.bottom-nav-item:hover {
+    background-color: #f4f4f6;
+}
+
+.bottom-nav-icon {
+    font-size: 20px;
+}
+
+.bottom-nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.bottom-nav-item.active {
+    color: #d96c9a;
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+    filter: none;
+}
+
+/* Clickable stepper dots (completed steps) */
+.stepper-dot.clickable {
+    cursor: pointer;
+}
+
+.stepper-dot.clickable:hover .stepper-circle {
+    box-shadow: 0 0 0 3px rgba(217, 108, 154, 0.25);
+}
+
+/* Video preview */
+.video-preview {
+    width: 100%;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e8e8e8;
+    background-color: #000000;
+}
+
+.video-preview video {
+    width: 100%;
+    max-height: 480px;
+    display: block;
+    background-color: #000000;
+}
+
+/* History view */
+.history-view {
+    padding-bottom: 20px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    text-align: left;
+    padding: 16px 18px;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.history-card:hover {
+    border-color: #d96c9a;
+}
+
+.history-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.history-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #000000;
+}
+
+.history-card-meta {
+    font-size: 12px;
+    color: #9da3ae;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.history-card-arrow {
+    font-size: 22px;
+    color: #d96c9a;
+}
+
+/* History detail overlay */
+.history-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 100;
+}
+
+.history-detail-panel {
+    position: relative;
+    background-color: #ffffff;
+    border-radius: 16px 16px 0 0;
+    padding: 28px 20px;
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.history-detail-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #9da3ae;
+    cursor: pointer;
+    padding: 6px;
+}
+
+.history-detail-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #000000;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+}
+
+@media (min-width: 769px) {
+    .history-detail-overlay {
+        align-items: center;
+    }
+
+.history-detail-panel {
+    border-radius: 16px;
+}
+}
+
+@media (max-width: 768px) {
+    .bottom-nav-item {
+        min-width: 60px;
+        padding: 8px 16px;
+    }
+}
