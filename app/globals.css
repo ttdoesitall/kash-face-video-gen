@@ -634,3 +634,48 @@ body {
         padding: 8px 16px;
     }
 }
+
+
+/* Outfit reference (secondary image shown alongside the avatar image) */
+.outfit-reference {
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px dashed #e8e8e8;
+        border-radius: 8px;
+        background-color: #f9f9f9;
+}
+
+.outfit-reference-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #000000;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+}
+
+.outfit-preview {
+        width: 100%;
+        max-width: 240px;
+        margin: 0 auto 12px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e8e8e8;
+        background-color: #ffffff;
+}
+
+.outfit-preview img {
+        width: 100%;
+        height: auto;
+        display: block;
+}
+
+.btn-small {
+        padding: 10px 16px !important;
+        font-size: 13px !important;
+        min-height: 36px !important;
+        flex: 0 1 auto !important;
+}
