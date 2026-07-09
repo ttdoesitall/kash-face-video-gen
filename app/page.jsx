@@ -27,7 +27,7 @@ export default function Dashboard() {
   const [script, setScript] = useState('');
   const [gender, setGender] = useState('female');
   const [avatarPrompt, setAvatarPrompt] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [imageBase64, setImageBase64] = useState('');
   const [imageMime, setImageMime] = useState('image/png');
   const [imageProvider, setImageProvider] = useState('gemini');
@@ -57,7 +57,7 @@ export default function Dashboard() {
     setScript('');
     setGender('female');
     setAvatarPrompt('');
-    setAspectRatio('16:9');
+    setAspectRatio('9:16');
     setImageBase64('');
     setImageMime('image/png');
     setImageProvider('gemini');
@@ -237,25 +237,27 @@ export default function Dashboard() {
     }
   };
 
-  // Higgsfield can take 3-5+ minutes to render a clip -- longer than a
-  // serverless function can safely stay open. generate-video kicks the job
-  // off and returns a jobId immediately; this polls a lightweight status
-  // endpoint every few seconds until the video is ready (or it fails).
-  const pollVideoStatus = (jobId) => {
+  // Each script chunk becomes its own lip-synced clip (Higgsfield's Speak
+  // model caps out at 15 seconds of audio per clip), so generate-video
+  // returns one jobId per chunk. This polls all of them until every chunk
+  // is done, then calls /api/stitch-video to combine them in order.
+  const pollVideoStatus = (jobIds) => {
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
-      const maxWaitMs = 6 * 60 * 1000;
+      const maxWaitMs = 8 * 60 * 1000;
 
       const check = async () => {
         try {
-          const res = await fetch(`/api/video-status?jobId=${encodeURIComponent(jobId)}`);
+          const res = await fetch(
+            `/api/video-status?jobIds=${encodeURIComponent(jobIds.join(','))}`
+          );
           const data = await res.json();
           if (!res.ok) {
             reject(new Error(data.error || 'Failed to check video status'));
             return;
           }
           if (data.status === 'completed') {
-            resolve(data.videoUrl);
+            resolve(data.videoUrls);
             return;
           }
           if (data.status === 'failed' || data.status === 'nsfw') {
@@ -270,10 +272,14 @@ export default function Dashboard() {
             );
             return;
           }
+          const progress =
+            data.totalCount > 1 && typeof data.completedCount === 'number'
+              ? ` (${data.completedCount}/${data.totalCount} clips)`
+              : '';
           setVideoStatusMessage(
-            data.status === 'queued'
+            (data.status === 'queued'
               ? 'Queued...'
-              : 'Still rendering -- this usually takes 2-4 minutes...'
+              : 'Still rendering -- this usually takes 2-4 minutes per clip...') + progress
           );
           setTimeout(check, 4000);
         } catch (err) {
@@ -286,19 +292,30 @@ export default function Dashboard() {
   };
 
   const handleGenerateVideo = async () => {
-    if (!movementPrompt.trim()) {
-      setError('Movement prompt cannot be empty');
+    if (!script.trim()) {
+      setError('Script cannot be empty');
       return;
     }
     setLoading(true);
     setError('');
-    setVideoStatusMessage('Starting video generation...');
+    setVideoStatusMessage('Generating speech and starting video generation...');
     try {
       const data = await callApi('/api/generate-video', {
         imageBase64,
+        script,
+        gender,
         movementPrompt,
       });
-      const finalVideoUrl = await pollVideoStatus(data.jobId);
+      const jobIds = data.jobs.map((j) => j.jobId);
+      const videoUrls = await pollVideoStatus(jobIds);
+
+      let finalVideoUrl = videoUrls[0];
+      if (videoUrls.length > 1) {
+        setVideoStatusMessage('Combining clips into one video...');
+        const stitchData = await callApi('/api/stitch-video', { videoUrls });
+        finalVideoUrl = stitchData.videoUrl;
+      }
+
       setVideoUrl(finalVideoUrl);
       setStage('video');
     } catch (err) {
@@ -524,8 +541,8 @@ export default function Dashboard() {
                   value={aspectRatio}
                   onChange={(e) => setAspectRatio(e.target.value)}
                 >
+                  <option value="9:16">9:16 (vertical / Shorts)</option>
                   <option value="16:9">16:9 (widescreen)</option>
-                  <option value="9:16">9:16 (vertical / reels)</option>
                   <option value="1:1">1:1 (square)</option>
                   <option value="4:5">4:5 (portrait)</option>
                 </select>
@@ -618,8 +635,10 @@ export default function Dashboard() {
             {/* STAGE: MOVEMENT */}
             {stage === 'movement' && (
               <div className="stage-card">
-                <h3>Movement Prompt</h3>
-                <p className="stage-hint">Edit freely, then generate the video.</p>
+                <h3>Speaking Style</h3>
+                <p className="stage-hint">
+                  Sets the tone/energy for the talking avatar. Edit freely, then generate the video.
+                </p>
                 <textarea
                   className="stage-textarea"
                   value={movementPrompt}
