@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [movementPrompt, setMovementPrompt] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [saveWarning, setSaveWarning] = useState('');
+  const [videoStatusMessage, setVideoStatusMessage] = useState('');
 
   const [outfitPrompt, setOutfitPrompt] = useState('');
   const [outfitImageBase64, setOutfitImageBase64] = useState('');
@@ -63,6 +64,7 @@ export default function Dashboard() {
     setMovementPrompt('');
     setVideoUrl('');
     setSaveWarning('');
+    setVideoStatusMessage('');
     setOutfitPrompt('');
     setOutfitImageBase64('');
     setOutfitLoading(false);
@@ -235,6 +237,54 @@ export default function Dashboard() {
     }
   };
 
+  // Higgsfield can take 3-5+ minutes to render a clip -- longer than a
+  // serverless function can safely stay open. generate-video kicks the job
+  // off and returns a jobId immediately; this polls a lightweight status
+  // endpoint every few seconds until the video is ready (or it fails).
+  const pollVideoStatus = (jobId) => {
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const maxWaitMs = 6 * 60 * 1000;
+
+      const check = async () => {
+        try {
+          const res = await fetch(`/api/video-status?jobId=${encodeURIComponent(jobId)}`);
+          const data = await res.json();
+          if (!res.ok) {
+            reject(new Error(data.error || 'Failed to check video status'));
+            return;
+          }
+          if (data.status === 'completed') {
+            resolve(data.videoUrl);
+            return;
+          }
+          if (data.status === 'failed' || data.status === 'nsfw') {
+            reject(new Error(data.error || 'Video generation failed'));
+            return;
+          }
+          if (Date.now() - startedAt > maxWaitMs) {
+            reject(
+              new Error(
+                'Video is taking longer than expected. Check History in a few minutes -- it may still finish.'
+              )
+            );
+            return;
+          }
+          setVideoStatusMessage(
+            data.status === 'queued'
+              ? 'Queued...'
+              : 'Still rendering -- this usually takes 2-4 minutes...'
+          );
+          setTimeout(check, 4000);
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      check();
+    });
+  };
+
   const handleGenerateVideo = async () => {
     if (!movementPrompt.trim()) {
       setError('Movement prompt cannot be empty');
@@ -242,18 +292,20 @@ export default function Dashboard() {
     }
     setLoading(true);
     setError('');
+    setVideoStatusMessage('Starting video generation...');
     try {
       const data = await callApi('/api/generate-video', {
         imageBase64,
-        outfitImageBase64: outfitImageBase64 || undefined,
         movementPrompt,
       });
-      setVideoUrl(data.videoUrl);
+      const finalVideoUrl = await pollVideoStatus(data.jobId);
+      setVideoUrl(finalVideoUrl);
       setStage('video');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setVideoStatusMessage('');
     }
   };
 
@@ -574,6 +626,9 @@ export default function Dashboard() {
                   onChange={(e) => setMovementPrompt(e.target.value)}
                   rows={8}
                 />
+                {videoStatusMessage && (
+                  <p className="stage-hint">{videoStatusMessage}</p>
+                )}
                 <div className="stage-actions">
                   <button
                     className="btn-secondary"
@@ -594,6 +649,9 @@ export default function Dashboard() {
               <div className="stage-card">
                 <h3>Video Preview</h3>
                 <p className="stage-hint">Watch it, then approve to save — or regenerate.</p>
+                {videoStatusMessage && (
+                  <p className="stage-hint">{videoStatusMessage}</p>
+                )}
                 {videoUrl && (
                   <div className="video-preview">
                     {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
