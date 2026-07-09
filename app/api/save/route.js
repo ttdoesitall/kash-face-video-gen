@@ -5,6 +5,31 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Fires a GoHighLevel inbound webhook so Toya gets an email the moment a
+// video is approved. This is best-effort: notification failures are logged
+// but never block the save itself.
+async function notifyApproved({ title, script, videoUrl, gender }) {
+  if (!process.env.GHL_APPROVAL_WEBHOOK_URL) {
+    console.warn('GHL_APPROVAL_WEBHOOK_URL not set -- skipping approval notification.');
+    return;
+  }
+  try {
+    await fetch(process.env.GHL_APPROVAL_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        script,
+        video_url: videoUrl || '',
+        gender: gender || '',
+        recipient_email: 'Toya@ttdoesitall.com',
+      }),
+    });
+  } catch (err) {
+    console.error('Approval notification webhook failed:', err);
+  }
+}
+
 export async function POST(request) {
   try {
     const {
@@ -42,6 +67,7 @@ export async function POST(request) {
     const { error: fullError } = await supabase.from('videos').insert(fullRecord);
 
     if (!fullError) {
+      await notifyApproved({ title, script, videoUrl, gender });
       return Response.json({ success: true, mode: 'full' });
     }
 
@@ -66,6 +92,8 @@ export async function POST(request) {
         { status: 500 }
       );
     }
+
+    await notifyApproved({ title, script, videoUrl, gender });
 
     return Response.json({
       success: true,
