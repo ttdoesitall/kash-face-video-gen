@@ -1,4 +1,3 @@
-export const maxDuration = 300;
 import { HiggsfieldClient } from '@higgsfield/client';
 
 const client = new HiggsfieldClient({
@@ -35,34 +34,21 @@ export async function POST(request) {
     // is intentionally not included here.
     const inputImages = [{ type: 'image_url', image_url: imageUrl }];
 
-    const jobSet = await client.generate('/v1/image2video/dop', {
-      model: 'dop-turbo',
-      prompt: movementPrompt,
-      input_images: inputImages,
-    });
+    // withPolling: false -- Higgsfield can take 3-5+ minutes to render a
+    // clip, longer than a serverless function can safely hold a request
+    // open. Submit the job and return its id immediately; the frontend
+    // polls /api/video-status with this id until the video is ready.
+    const jobSet = await client.generate(
+      '/v1/image2video/dop',
+      {
+        model: 'dop-turbo',
+        prompt: movementPrompt,
+        input_images: inputImages,
+      },
+      { withPolling: false }
+    );
 
-    if (jobSet.isFailed) {
-      return Response.json(
-        { error: 'Video generation failed. Try again or adjust the movement prompt.' },
-        { status: 502 }
-      );
-    }
-
-    if (jobSet.isNsfw) {
-      return Response.json(
-        { error: 'The video was flagged by content moderation. Try adjusting the avatar image or prompt.' },
-        { status: 422 }
-      );
-    }
-
-    const job = jobSet.jobs[0];
-    const videoUrl = job && job.results ? job.results.raw.url : null;
-
-    if (!videoUrl) {
-      return Response.json({ error: 'No video was returned. Try again.' }, { status: 502 });
-    }
-
-    return Response.json({ success: true, videoUrl });
+    return Response.json({ success: true, jobId: jobSet.id });
   } catch (error) {
     console.error('Video generation error:', error);
     return Response.json(
