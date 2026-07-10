@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import { uploadVideoToYouTube } from '../../lib/youtube';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+export const maxDuration = 300;
 
 // Fires a GoHighLevel inbound webhook so Toya gets an email the moment a
 // video is approved. This is best-effort: notification failures are logged
@@ -27,6 +30,27 @@ async function notifyApproved({ title, script, videoUrl, gender }) {
     });
   } catch (err) {
     console.error('Approval notification webhook failed:', err);
+  }
+}
+
+// Uploads the approved video straight to YouTube with title + description
+// filled in. Best-effort: if YouTube isn't connected yet (no refresh token
+// saved), this just logs and skips -- it never blocks the save.
+async function notifyYouTube({ title, script, videoUrl }) {
+  if (!videoUrl) return;
+  try {
+    const result = await uploadVideoToYouTube({
+      videoUrl,
+      title,
+      description: script || '',
+    });
+    if (result?.skipped) {
+      console.warn('YouTube upload skipped:', result.reason);
+    } else {
+      console.log('Uploaded to YouTube:', result.url);
+    }
+  } catch (err) {
+    console.error('YouTube upload failed:', err);
   }
 }
 
@@ -68,6 +92,7 @@ export async function POST(request) {
 
     if (!fullError) {
       await notifyApproved({ title, script, videoUrl, gender });
+      await notifyYouTube({ title, script, videoUrl });
       return Response.json({ success: true, mode: 'full' });
     }
 
@@ -94,6 +119,7 @@ export async function POST(request) {
     }
 
     await notifyApproved({ title, script, videoUrl, gender });
+    await notifyYouTube({ title, script, videoUrl });
 
     return Response.json({
       success: true,
